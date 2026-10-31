@@ -14,3 +14,8 @@ android {
         versionName = "1.0"
     }
 }
+
+
+dependencies {
+    implementation("com.github.singbox-android:libbox:1.14.0")
+}
