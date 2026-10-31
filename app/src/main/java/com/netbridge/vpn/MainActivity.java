@@ -1,6 +1,6 @@
 package com.netbridge.vpn;
 
-import android.app.Activity;
+import android.app.Activity;\nimport android.net.VpnService;\nimport android.content.Intent;\nimport android.content.Context;\nimport android.os.Build;
 import android.os.Bundle;
 import android.graphics.Color;
 import android.view.Gravity;
@@ -16,7 +16,7 @@ public class MainActivity extends Activity {
     private TextView status;
     private TextView results;
     private Button searchButton;
-    private ConfigSourceManager manager;
+    private ConfigSourceManager manager;\n    private static final int VPN_REQUEST_CODE = 7001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,6 +46,9 @@ public class MainActivity extends Activity {
         searchButton = new Button(this);
         searchButton.setText("جست‌وجوی خودکار کانفیگ");
 
+        Button connectButton = new Button(this);
+        connectButton.setText("درخواست اتصال VPN");
+
         results = new TextView(this);
         results.setTextColor(Color.WHITE);
         results.setTextSize(13);
@@ -56,12 +59,42 @@ public class MainActivity extends Activity {
 
         layout.addView(title);
         layout.addView(status);
-        layout.addView(searchButton);
+        layout.addView(searchButton);\n        layout.addView(connectButton);
         layout.addView(scroll);
 
         setContentView(layout);
 
         searchButton.setOnClickListener(v -> startSearch());
+        connectButton.setOnClickListener(v -> requestVpnPermission());
+    }
+
+
+    private void requestVpnPermission() {
+        Intent prepare = VpnService.prepare(this);
+        if (prepare != null) {
+            startActivityForResult(prepare, VPN_REQUEST_CODE);
+        } else {
+            startVpnService();
+        }
+    }
+
+    private void startVpnService() {
+        Intent service = new Intent(this, NetBridgeVpnService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(service);
+        } else {
+            startService(service);
+        }
+        status.setText("سرویس VPN شروع شد؛ موتور sing-box هنوز باید متصل شود.");
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == VPN_REQUEST_CODE) {
+            if (resultCode == RESULT_OK) startVpnService();
+            else status.setText("اجازه VPN داده نشد.");
+        }
     }
 
     private void startSearch() {
