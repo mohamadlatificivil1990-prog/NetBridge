@@ -121,9 +121,7 @@ public class MainActivity extends Activity {
                         output.append(i + 1)
                                 .append(". ")
                                 .append(configs.get(i).split("#")[0])
-                                .append("
-
-");
+                                .append("\n\n");
                     }
 
                     results.setText(output.toString());
