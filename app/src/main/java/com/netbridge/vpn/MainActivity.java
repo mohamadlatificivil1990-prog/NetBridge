@@ -1,6 +1,10 @@
 package com.netbridge.vpn;
 
-import android.app.Activity;\nimport android.net.VpnService;\nimport android.content.Intent;\nimport android.content.Context;\nimport android.os.Build;
+import android.app.Activity;
+import android.net.VpnService;
+import android.content.Intent;
+import android.content.Context;
+import android.os.Build;
 import android.os.Bundle;
 import android.graphics.Color;
 import android.view.Gravity;
@@ -16,7 +20,8 @@ public class MainActivity extends Activity {
     private TextView status;
     private TextView results;
     private Button searchButton;
-    private ConfigSourceManager manager;\n    private static final int VPN_REQUEST_CODE = 7001;
+    private ConfigSourceManager manager;
+    private static final int VPN_REQUEST_CODE = 7001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,7 +64,8 @@ public class MainActivity extends Activity {
 
         layout.addView(title);
         layout.addView(status);
-        layout.addView(searchButton);\n        layout.addView(connectButton);
+        layout.addView(searchButton);
+        layout.addView(connectButton);
         layout.addView(scroll);
 
         setContentView(layout);
@@ -115,7 +121,9 @@ public class MainActivity extends Activity {
                         output.append(i + 1)
                                 .append(". ")
                                 .append(configs.get(i).split("#")[0])
-                                .append("\n\n");
+                                .append("
+
+");
                     }
 
                     results.setText(output.toString());
