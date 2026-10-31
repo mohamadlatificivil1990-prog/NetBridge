@@ -1,9 +1,14 @@
 package com.netbridge.vpn;
 
-import java.net.URL;
-import java.net.HttpURLConnection;
+import android.util.Base64;
+import android.util.Log;
+
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -15,21 +20,18 @@ import java.util.concurrent.Executors;
 public class ConfigSourceManager {
 
     private static final String TAG = "NetBridgeSources";
+    private static final int MAX_BYTES = 2 * 1024 * 1024;
 
-    private final ExecutorService executor =
-            Executors.newFixedThreadPool(6);
-
-    private final Set<String> configs =
-            new LinkedHashSet<>();
-
-    private final List<String> sources = new ArrayList<>();
+    private final ExecutorService executor = Executors.newFixedThreadPool(6);
+    private final Set<String> configs = new LinkedHashSet<>();
+    private final Set<String> sources = new LinkedHashSet<>();
 
     public ConfigSourceManager() {
-        // Public subscription source
         sources.add("https://radarhub.top/sing-box.json");
-
-        // Add more public subscription URLs here.
-        // Each source is downloaded independently.
+        sources.add("https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_merge.txt");
+        sources.add("https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_base64.txt");
+        sources.add("https://raw.githubusercontent.com/peasoft/NoMoreWalls/master/list.txt");
+        sources.add("https://raw.githubusercontent.com/Leon406/SubCrawler/master/sub/share/all3");
     }
 
     public interface Callback {
@@ -43,9 +45,14 @@ public class ConfigSourceManager {
                 configs.clear();
             }
 
+            List<String> sourceCopy;
+            synchronized (sources) {
+                sourceCopy = new ArrayList<>(sources);
+            }
+
             List<Thread> workers = new ArrayList<>();
 
-            for (String source : sources) {
+            for (String source : sourceCopy) {
                 Thread worker = new Thread(() -> download(source));
                 workers.add(worker);
                 worker.start();
@@ -53,9 +60,10 @@ public class ConfigSourceManager {
 
             for (Thread worker : workers) {
                 try {
-                    worker.join(20000);
+                    worker.join(25000);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    break;
                 }
             }
 
@@ -65,7 +73,7 @@ public class ConfigSourceManager {
             }
 
             if (result.isEmpty()) {
-                callback.onError("No supported configurations found");
+                callback.onError("از منابع فعلی کانفیگ معتبری دریافت نشد.");
             } else {
                 callback.onComplete(result);
             }
@@ -76,35 +84,54 @@ public class ConfigSourceManager {
         HttpURLConnection connection = null;
 
         try {
-            URL url = new URL(address);
-            connection = (HttpURLConnection) url.openConnection();
-
+            connection = (HttpURLConnection) new URL(address).openConnection();
             connection.setRequestMethod("GET");
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(15000);
-            connection.setRequestProperty(
-                    "User-Agent", "NetBridgeVPN/1.0"
-            );
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("User-Agent", "NetBridgeVPN/1.1");
+            connection.setRequestProperty("Accept", "*/*");
 
-            int status = connection.getResponseCode();
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                return;
+            }
 
-            if (status != 200) return;
+            try (InputStream input = connection.getInputStream();
+                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
 
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(
-                            connection.getInputStream(),
-                            StandardCharsets.UTF_8
-                    ))) {
+                byte[] buffer = new byte[8192];
+                int count;
+                int total = 0;
 
-                String line;
+                while ((count = input.read(buffer)) != -1) {
+                    total += count;
+                    if (total > MAX_BYTES) {
+                        Log.w(TAG, "Source too large: " + address);
+                        return;
+                    }
+                    output.write(buffer, 0, count);
+                }
 
-                while ((line = reader.readLine()) != null) {
-                    extractConfigs(line);
+                String body = output.toString("UTF-8");
+                extractConfigs(body);
+
+                String compact = body.replaceAll("\\s+", "");
+                if (!compact.isEmpty()
+                        && !compact.contains("://")
+                        && compact.matches("[A-Za-z0-9+/=]+")) {
+                    try {
+                        String decoded = new String(
+                                Base64.decode(compact, Base64.DEFAULT),
+                                StandardCharsets.UTF_8
+                        );
+                        extractConfigs(decoded);
+                    } catch (Exception ignored) {
+                    }
                 }
             }
 
         } catch (Exception e) {
-            android.util.Log.w(TAG, "Source failed: " + address, e);
+            Log.w(TAG, "Source failed: " + address, e);
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -114,11 +141,9 @@ public class ConfigSourceManager {
 
     private void extractConfigs(String text) {
         String[] schemes = {
-                "vless://",
-                "vmess://",
-                "trojan://",
-                "wireguard://",
-                "ss://"
+                "vless://", "vmess://", "trojan://",
+                "wireguard://", "ss://", "hysteria2://",
+                "hysteria://", "tuic://", "socks://"
         };
 
         for (String scheme : schemes) {
@@ -129,24 +154,23 @@ public class ConfigSourceManager {
 
                 while (end < text.length()) {
                     char c = text.charAt(end);
-
                     if (Character.isWhitespace(c)
                             || c == '"'
                             || c == '\''
                             || c == '<'
-                            || c == '>') {
+                            || c == '>'
+                            || c == ',') {
                         break;
                     }
-
                     end++;
                 }
 
                 String config = text.substring(start, end)
-                        .replace(",", "")
-                        .replace("]", "")
-                        .replace("}", "");
+                        .replaceAll("[\\]\\}\\)]+$", "")
+                        .trim();
 
-                if (config.length() > scheme.length()) {
+                if (config.length() > scheme.length()
+                        && config.length() < 8192) {
                     synchronized (configs) {
                         configs.add(config);
                     }
@@ -158,9 +182,10 @@ public class ConfigSourceManager {
     }
 
     public void addSource(String address) {
-        if (address != null && address.startsWith("https://")
-                && !sources.contains(address)) {
-            sources.add(address);
+        if (address != null && address.startsWith("https://")) {
+            synchronized (sources) {
+                sources.add(address.trim());
+            }
         }
     }
 
