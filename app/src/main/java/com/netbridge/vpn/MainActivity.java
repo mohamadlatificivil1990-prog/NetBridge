@@ -7,42 +7,105 @@ import android.view.Gravity;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Button;
+import android.widget.ScrollView;
+
+import java.util.List;
 
 public class MainActivity extends Activity {
+
+    private TextView status;
+    private TextView results;
+    private Button searchButton;
+    private ConfigSourceManager manager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        manager = new ConfigSourceManager();
+
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setGravity(Gravity.CENTER);
-        layout.setPadding(32, 32, 32, 32);
+        layout.setPadding(28, 35, 28, 25);
         layout.setBackgroundColor(Color.rgb(15, 23, 42));
 
         TextView title = new TextView(this);
         title.setText("NetBridge VPN");
-        title.setTextSize(30);
+        title.setTextSize(28);
         title.setTextColor(Color.WHITE);
         title.setGravity(Gravity.CENTER);
+        title.setPadding(0, 10, 0, 25);
 
-        TextView status = new TextView(this);
-        status.setText("وضعیت: قطع");
-        status.setTextSize(18);
+        status = new TextView(this);
+        status.setText("وضعیت: آماده جست‌وجو");
+        status.setTextSize(17);
         status.setTextColor(Color.LTGRAY);
         status.setGravity(Gravity.CENTER);
+        status.setPadding(0, 10, 0, 20);
 
-        Button connect = new Button(this);
-        connect.setText("اتصال VPN");
+        searchButton = new Button(this);
+        searchButton.setText("جست‌وجوی خودکار کانفیگ");
 
-        connect.setOnClickListener(v ->
-            status.setText("موتور VPN هنوز نصب نشده است")
-        );
+        results = new TextView(this);
+        results.setTextColor(Color.WHITE);
+        results.setTextSize(13);
+        results.setPadding(5, 20, 5, 20);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(results);
 
         layout.addView(title);
         layout.addView(status);
-        layout.addView(connect);
+        layout.addView(searchButton);
+        layout.addView(scroll);
 
         setContentView(layout);
+
+        searchButton.setOnClickListener(v -> startSearch());
+    }
+
+    private void startSearch() {
+        searchButton.setEnabled(false);
+        status.setText("در حال دریافت و بررسی کانفیگ‌ها...");
+        results.setText("");
+
+        manager.scan(new ConfigSourceManager.Callback() {
+            @Override
+            public void onComplete(List<String> configs) {
+                runOnUiThread(() -> {
+                    status.setText("تعداد کانفیگ‌های پیدا شده: "
+                            + configs.size());
+
+                    StringBuilder output = new StringBuilder();
+
+                    for (int i = 0; i < configs.size(); i++) {
+                        output.append(i + 1)
+                                .append(". ")
+                                .append(configs.get(i).split("#")[0])
+                                .append("\n\n");
+                    }
+
+                    results.setText(output.toString());
+                    searchButton.setEnabled(true);
+                });
+            }
+
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() -> {
+                    status.setText("کانفیگی پیدا نشد");
+                    results.setText(message);
+                    searchButton.setEnabled(true);
+                });
+            }
+        });
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (manager != null) {
+            manager.close();
+        }
+        super.onDestroy();
     }
 }
