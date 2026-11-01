@@ -3,7 +3,9 @@ package com.netbridge.vpn;
 import android.app.Activity;
 import android.net.VpnService;
 import android.content.Intent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
 import android.graphics.Color;
@@ -12,21 +14,28 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Button;
 import android.widget.ScrollView;
-
 import java.util.List;
 
 public class MainActivity extends Activity {
-
     private TextView status;
     private TextView results;
     private Button searchButton;
     private ConfigSourceManager manager;
     private static final int VPN_REQUEST_CODE = 7001;
 
+    private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String message = intent.getStringExtra("message");
+            if (message != null && status != null) {
+                status.setText(message);
+            }
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         manager = new ConfigSourceManager();
 
         LinearLayout layout = new LinearLayout(this);
@@ -52,7 +61,7 @@ public class MainActivity extends Activity {
         searchButton.setText("جست‌وجوی خودکار کانفیگ");
 
         Button connectButton = new Button(this);
-        connectButton.setText("درخواست اتصال VPN");
+        connectButton.setText("اتصال VPN");
 
         results = new TextView(this);
         results.setTextColor(Color.WHITE);
@@ -67,13 +76,18 @@ public class MainActivity extends Activity {
         layout.addView(searchButton);
         layout.addView(connectButton);
         layout.addView(scroll);
-
         setContentView(layout);
 
         searchButton.setOnClickListener(v -> startSearch());
         connectButton.setOnClickListener(v -> requestVpnPermission());
-    }
 
+        IntentFilter filter = new IntentFilter("com.netbridge.vpn.STATUS");
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(statusReceiver, filter);
+        }
+    }
 
     private void requestVpnPermission() {
         Intent prepare = VpnService.prepare(this);
@@ -86,20 +100,23 @@ public class MainActivity extends Activity {
 
     private void startVpnService() {
         Intent service = new Intent(this, NetBridgeVpnService.class);
+        status.setText("در حال راه‌اندازی موتور و ایجاد تونل...");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(service);
         } else {
             startService(service);
         }
-        status.setText("سرویس VPN شروع شد؛ موتور sing-box هنوز باید متصل شود.");
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == VPN_REQUEST_CODE) {
-            if (resultCode == RESULT_OK) startVpnService();
-            else status.setText("اجازه VPN داده نشد.");
+            if (resultCode == RESULT_OK) {
+                startVpnService();
+            } else {
+                status.setText("اجازه VPN داده نشد.");
+            }
         }
     }
 
@@ -112,18 +129,14 @@ public class MainActivity extends Activity {
             @Override
             public void onComplete(List<String> configs) {
                 runOnUiThread(() -> {
-                    status.setText("تعداد کانفیگ‌های پیدا شده: "
-                            + configs.size());
-
+                    status.setText("تعداد کانفیگ‌های پیدا شده: " + configs.size());
                     StringBuilder output = new StringBuilder();
-
                     for (int i = 0; i < configs.size(); i++) {
                         output.append(i + 1)
-                                .append(". ")
-                                .append(configs.get(i).split("#")[0])
-                                .append("\n\n");
+                              .append(". ")
+                              .append(configs.get(i).split("#")[0])
+                              .append("\n\n");
                     }
-
                     results.setText(output.toString());
                     searchButton.setEnabled(true);
                 });
@@ -142,9 +155,11 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (manager != null) {
-            manager.close();
+        try {
+            unregisterReceiver(statusReceiver);
+        } catch (Exception ignored) {
         }
+        if (manager != null) manager.close();
         super.onDestroy();
     }
 }
