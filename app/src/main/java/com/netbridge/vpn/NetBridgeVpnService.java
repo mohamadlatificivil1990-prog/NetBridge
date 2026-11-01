@@ -88,6 +88,18 @@ public class NetBridgeVpnService extends VpnService
         } catch (Exception e) {
             running = false;
             Log.e(TAG, "Engine startup failed", e);
+
+            try {
+                java.io.File logFile = new java.io.File(
+                        getExternalFilesDir(null), "netbridge-error.log");
+                try (java.io.PrintWriter writer = new java.io.PrintWriter(
+                        new java.io.FileWriter(logFile, false))) {
+                    e.printStackTrace(writer);
+                }
+            } catch (Exception logError) {
+                Log.e(TAG, "Could not save error log", logError);
+            }
+
             updateNotification("خطا در اتصال: " + e.getMessage());
             sendStatus("ENGINE_ERROR", e.getMessage());
 
