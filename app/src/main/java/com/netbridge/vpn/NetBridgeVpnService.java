@@ -50,11 +50,49 @@ public class NetBridgeVpnService extends VpnService
                 buildNotification("در حال آماده‌سازی موتور sing-box")
         );
 
-        if (!running) {
+        if (intent != null && "com.netbridge.vpn.VALIDATE_CONFIG".equals(intent.getAction())) {
+            new Thread(() -> validateTestConfig(), "NetBridge-Config-Test").start();
+        } else if (!running) {
             new Thread(() -> startEngine(), "NetBridge-Engine").start();
         }
 
         return START_NOT_STICKY;
+    }
+
+    private void validateTestConfig() {
+        try {
+            if (running) {
+                sendStatus("CONFIG_TEST_BLOCKED", "برای آزمایش کانفیگ، ابتدا VPN را قطع کن.");
+                return;
+            }
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(getAssets().open("merged-test.json"), "UTF-8"))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append('\n');
+                }
+            }
+
+            String testConfig = output.toString();
+            setupLibbox();
+            Libbox.checkConfig(testConfig);
+
+            Log.i(TAG, "Merged test config validation passed");
+            sendStatus("CONFIG_VALID", "اعتبارسنجی موفق: ساختار کانفیگ آزمایشی معتبر است.");
+        } catch (Exception e) {
+            Log.e(TAG, "Merged test config validation failed", e);
+            sendStatus("CONFIG_INVALID", "اعتبارسنجی ناموفق: " + e.getMessage());
+        } finally {
+            if (!running) {
+                if (Build.VERSION.SDK_INT >= 24) {
+                    stopForeground(STOP_FOREGROUND_REMOVE);
+                } else {
+                    stopForeground(true);
+                }
+                stopSelf();
+            }
+        }
     }
 
     private synchronized void startEngine() {
