@@ -130,14 +130,20 @@ public class MainActivity extends Activity {
             public void onComplete(List<String> configs) {
                 runOnUiThread(() -> {
                     status.setText("تعداد کانفیگ‌های پیدا شده: " + configs.size());
-                    StringBuilder output = new StringBuilder();
-                    for (int i = 0; i < configs.size(); i++) {
-                        output.append(i + 1)
-                              .append(". ")
-                              .append(configs.get(i).split("#")[0])
-                              .append("\n\n");
-                    }
-                    results.setText(output.toString());
+                    String selectedConfig = configs.get(0);
+
+                    getSharedPreferences("NetBridge",
+                            MODE_PRIVATE)
+                            .edit()
+                            .putString("selected_config", selectedConfig)
+                            .apply();
+
+                    results.setText(
+                            "کانفیگ کامل sing-box دریافت و ذخیره شد.\n"
+                            + "تعداد کانفیگ‌های دریافتی: "
+                            + configs.size()
+                            + "\n\nبرای اجرای آن، دکمه اتصال VPN را بزنید."
+                    );
                     searchButton.setEnabled(true);
                 });
             }

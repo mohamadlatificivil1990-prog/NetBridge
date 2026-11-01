@@ -96,21 +96,24 @@ public class NetBridgeVpnService extends VpnService
     }
 
     private String readConfig() throws Exception {
-        StringBuilder output = new StringBuilder();
+        String selected = getSharedPreferences("NetBridge", MODE_PRIVATE)
+                .getString("selected_config", null);
 
+        if (selected != null && !selected.trim().isEmpty()) {
+            return selected;
+        }
+
+        StringBuilder output = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(
                         getAssets().open("source.json"),
                         "UTF-8"
                 ))) {
-
             String line;
-
             while ((line = reader.readLine()) != null) {
                 output.append(line).append('\n');
             }
         }
-
         return output.toString();
     }
 
